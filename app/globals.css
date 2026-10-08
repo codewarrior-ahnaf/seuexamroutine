@@ -152,13 +152,17 @@ h2 { margin-bottom: 5px; font: 700 19px "Manrope", sans-serif; letter-spacing: -
 .empty-state { min-height: 67px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #98a49c; background: #fff; border: 1px solid var(--line); border-radius: 9px; font-size: 11px; }
 .page-footer { padding: 24px 0 5px; color: #a8b1aa; font-size: 9px; text-align: center; }
 .page-footer span { margin-left: 4px; color: #79a183; }
-.alert { position: fixed; top: 82px; right: 22px; z-index: 10; display: flex; align-items: center; gap: 9px; max-width: min(440px, calc(100vw - 36px)); margin: 0; padding: 12px 12px 12px 15px; border-radius: 9px; box-shadow: 0 10px 32px #172d291a; font-size: 12px; line-height: 1.5; animation: toast-in .2s ease-out; }
-.alert strong { flex: 0 0 auto; font-size: 11px; }
-.alert > span { flex: 1; }
+.alert { position: fixed; top: 82px; right: 22px; z-index: 10; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 4px 10px; width: min(460px, calc(100vw - 36px)); margin: 0; padding: 12px; border-radius: 9px; box-shadow: 0 10px 32px #172d291a; font-size: 12px; line-height: 1.5; animation: toast-in .2s ease-out; }
+.alert-copy { display: grid; min-width: 0; gap: 3px; }
+.alert strong { font-size: 11px; line-height: 1.4; }
+.alert-copy span { min-width: 0; overflow-wrap: anywhere; }
 .toast-close { width: 25px; height: 25px; display: grid; flex: 0 0 auto; place-items: center; color: currentColor; background: transparent; border: 0; border-radius: 5px; cursor: pointer; opacity: .65; }
 .toast-close:hover { background: #172d2910; opacity: 1; }
 .error-alert { color: #9f473f; background: #fff1ef; border: 1px solid #f5d8d4; }
-.success-alert { color: #437856; background: #eff7ef; border: 1px solid #dcebdc; }
+.success-alert { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; color: #437856; background: #eff7ef; border: 1px solid #dcebdc; }
+.success-alert .alert-copy { grid-column: 2; }
+.success-alert > svg { grid-column: 1; grid-row: 1; }
+.success-alert .toast-close { grid-column: 3; grid-row: 1; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }

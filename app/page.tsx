@@ -133,7 +133,7 @@ export default function Home() {
       return () => window.removeEventListener("hashchange", updateActiveSection);
     } else if (query.get("auth_error") === "token_exchange") {
       setError(
-        "Google approved sign-in, but the server could not complete it. Check the Google client secret and callback URL in Railway, then try again.",
+        "Google approved sign-in, but Railway could not finish the token exchange. Set GOOGLE_CLIENT_CONFIG_JSON to the complete downloaded Web client JSON (not just the GOCSPX secret), and set GOOGLE_REDIRECT_URI to https://seuexamroutin.vercel.app/api/auth/callback. Then redeploy the Railway API and reconnect.",
       );
       window.history.replaceState({}, "", window.location.pathname);
     } else if (query.get("auth_error") === "profile") {
@@ -315,8 +315,8 @@ export default function Home() {
             <div className="today-chip"><CalendarDays size={16} /> {new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" }).format(new Date())}</div>
           </section>
 
-          {error && <div className="alert error-alert" role="alert"><strong>SEU Exam Routine</strong><span>{error}</span><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
-          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><strong>SEU Exam Routine</strong><span>{message}</span><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {error && <div className="alert error-alert" role="alert"><div className="alert-copy"><strong>SEU Exam Routine</strong><span>{error}</span></div><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><div className="alert-copy"><strong>SEU Exam Routine</strong><span>{message}</span></div><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
 
           <section className="stats-grid">
             <div className="stat-card">
