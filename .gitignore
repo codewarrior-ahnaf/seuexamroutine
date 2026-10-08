@@ -1,0 +1,10 @@
+.next/
+node_modules/
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+exam_dashboard.sqlite3
+gcalendercred.json
+token.json
+.session_secret
