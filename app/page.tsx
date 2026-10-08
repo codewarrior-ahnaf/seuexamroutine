@@ -73,13 +73,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!error) return;
-    const timeout = window.setTimeout(() => setError(""), 5000);
+    // OAuth errors contain the next step the user needs; keep them visible long
+    // enough to read, while still allowing an explicit dismiss.
+    const timeout = window.setTimeout(() => setError(""), 10000);
     return () => window.clearTimeout(timeout);
   }, [error]);
 
   useEffect(() => {
     if (!message) return;
-    const timeout = window.setTimeout(() => setMessage(""), 5000);
+    const timeout = window.setTimeout(() => setMessage(""), 8000);
     return () => window.clearTimeout(timeout);
   }, [message]);
 
@@ -101,7 +103,6 @@ export default function Home() {
       const examData = (await examsResponse.json()) as { exams: Exam[] };
       setStatus(statusData);
       setExams(examData.exams);
-      setError("");
       return statusData.google_connected;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load dashboard.");
@@ -122,9 +123,11 @@ export default function Home() {
       window.history.replaceState({}, "", window.location.pathname);
       void loadDashboard().then((isConnected) => {
         if (isConnected) {
+          setError("");
           setMessage("Google account connected successfully.");
         } else {
-          setError("Google returned successfully, but this browser is not connected yet. Please try Connect Google again.");
+          setMessage("");
+          setError("Google returned to the app, but the connection was not saved in this browser. Try connecting again in this same browser.");
         }
       });
       return () => window.removeEventListener("hashchange", updateActiveSection);
@@ -139,8 +142,11 @@ export default function Home() {
     } else if (query.get("auth_error") === "state" || query.get("auth_error") === "missing_code") {
       setError("This Google sign-in link expired or could not be verified. Please connect again.");
       window.history.replaceState({}, "", window.location.pathname);
+    } else if (query.get("auth_error") === "access_denied") {
+      setError("Google denied access. If the OAuth app is still in Testing, add this Google account under Google Cloud → Google Auth Platform → Audience → Test users. To allow everyone, publish the app and complete Google's verification if required.");
+      window.history.replaceState({}, "", window.location.pathname);
     } else if (query.get("auth_error")) {
-      setError("Google sign-in was cancelled. Connect your account to schedule reminders.");
+      setError("Google sign-in was cancelled or denied. Connect your account and allow Calendar access to schedule reminders.");
       window.history.replaceState({}, "", window.location.pathname);
     }
     void loadDashboard();

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k -n API,WEB \"./.venv/bin/python -m uvicorn seuexamroutin:app --reload --host 127.0.0.1 --port 8000\" \"next dev\"",
-    "dev:all": "concurrently -k -n API,WEB \"./.venv/bin/python -m uvicorn seuexamroutin:app --reload --host 127.0.0.1 --port 8000\" \"next dev\"",
+    "dev": "concurrently -k -n API,WEB \"./.venv/bin/python -m uvicorn seuexamroutine:app --reload --host 127.0.0.1 --port 8000\" \"next dev\"",
+    "dev:all": "concurrently -k -n API,WEB \"./.venv/bin/python -m uvicorn seuexamroutine:app --reload --host 127.0.0.1 --port 8000\" \"next dev\"",
     "build": "next build",
     "start": "next start"
   },

@@ -780,7 +780,11 @@ def google_auth_callback(
         return response
 
     if error:
-        return auth_error_response("cancelled")
+        # Preserve Google's access_denied result so the dashboard can explain
+        # the Testing-mode allowlist instead of showing a generic cancel toast.
+        return auth_error_response(
+            "access_denied" if error == "access_denied" else "oauth_error"
+        )
     if not code:
         return auth_error_response("missing_code")
     browser_nonce = request.cookies.get("exam_oauth_browser", "")
@@ -987,4 +991,4 @@ async def schedule_exams(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("seuexamroutin:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("seuexamroutine:app", host="127.0.0.1", port=8000, reload=True)

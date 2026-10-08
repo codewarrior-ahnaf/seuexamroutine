@@ -3,6 +3,6 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY seuexamroutin.py .
+COPY seuexamroutine.py .
 
-CMD ["sh", "-c", "uvicorn seuexamroutin:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn seuexamroutine:app --host 0.0.0.0 --port ${PORT:-8000}"]
