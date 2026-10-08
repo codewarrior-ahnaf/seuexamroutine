@@ -10,7 +10,7 @@ export default function NotFound() {
         <h1>This page is off the schedule.</h1>
         <p>The page you’re looking for may have moved or the address may be incorrect.</p>
         <Link className="not-found-link" href="/">
-          <ArrowLeft size={16} /> Back to SEU Exam Mate
+          <ArrowLeft size={16} /> Back to SEU Exam Routin
         </Link>
       </div>
     </main>

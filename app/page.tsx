@@ -231,7 +231,7 @@ export default function Home() {
       <aside className="sidebar">
         <a className="brand" href="#">
           <span className="brand-mark"><CalendarDays size={19} /></span>
-          <span>SEU <span className="brand-light">Exam Mate</span></span>
+          <span>SEU <span className="brand-light">Exam Routin</span></span>
         </a>
         <div className="side-label">WORKSPACE</div>
         <a className={`nav-item ${activeSection === "overview" ? "active" : ""}`} href="#overview" onClick={() => setActiveSection("overview")}><span className="nav-dot" />Overview</a>
@@ -309,8 +309,8 @@ export default function Home() {
             <div className="today-chip"><CalendarDays size={16} /> {new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" }).format(new Date())}</div>
           </section>
 
-          {error && <div className="alert error-alert" role="alert"><strong>SEU Exam Mate</strong><span>{error}</span><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
-          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><strong>SEU Exam Mate</strong><span>{message}</span><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {error && <div className="alert error-alert" role="alert"><strong>SEU Exam Routin</strong><span>{error}</span><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><strong>SEU Exam Routin</strong><span>{message}</span><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
 
           <section className="stats-grid">
             <div className="stat-card">
