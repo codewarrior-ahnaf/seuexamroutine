@@ -163,7 +163,6 @@ def _initialize_database() -> None:
                     calendar_event_id TEXT,
                     calendar_deleted INTEGER NOT NULL DEFAULT 0,
                     email_sent INTEGER NOT NULL DEFAULT 0,
-                    morning_email_sent INTEGER NOT NULL DEFAULT 0,
                     UNIQUE (user_id, signature)
                 )
                 """
@@ -192,7 +191,6 @@ def _initialize_database() -> None:
                     calendar_event_id TEXT,
                     calendar_deleted INTEGER NOT NULL DEFAULT 0,
                     email_sent INTEGER NOT NULL DEFAULT 0,
-                    morning_email_sent INTEGER NOT NULL DEFAULT 0,
                     UNIQUE (user_id, signature)
                 )
                 """
@@ -212,18 +210,6 @@ def _initialize_database() -> None:
                     """
                 )
                 connection.execute("DROP TABLE exams_legacy")
-        if DATABASE_URL:
-            connection.execute(
-                "ALTER TABLE exams ADD COLUMN IF NOT EXISTS morning_email_sent INTEGER NOT NULL DEFAULT 0"
-            )
-        else:
-            exam_columns = {
-                row["name"] for row in connection.execute("PRAGMA table_info(exams)").fetchall()
-            }
-            if "morning_email_sent" not in exam_columns:
-                connection.execute(
-                    "ALTER TABLE exams ADD COLUMN morning_email_sent INTEGER NOT NULL DEFAULT 0"
-                )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS google_accounts (
@@ -539,6 +525,14 @@ def _get_google_profile(credentials: Credentials) -> tuple[str, str]:
 
 
 def build_exam_event_details(exam: dict[str, Any]) -> dict[str, Any]:
+    exam_start = exam["start_datetime"]
+    five_am = datetime.combine(
+        exam_start.date(), time(5, 0), tzinfo=EXAM_TIMEZONE
+    )
+    five_am_minutes_before = max(
+        0, int((exam_start - five_am).total_seconds() // 60)
+    )
+    popup_minutes = sorted({1440, 120, five_am_minutes_before})
     return {
         "summary": f"{exam['course_code']} - {exam['course_title']} (Exam)",
         "location": exam["program"],
@@ -562,8 +556,10 @@ def build_exam_event_details(exam: dict[str, Any]) -> dict[str, Any]:
         "reminders": {
             "useDefault": False,
             "overrides": [
-                {"method": "popup", "minutes": 120},
-                {"method": "popup", "minutes": 1440},
+                *(
+                    {"method": "popup", "minutes": minutes}
+                    for minutes in popup_minutes
+                ),
                 {"method": "email", "minutes": 2880},
             ],
         },
@@ -626,16 +622,6 @@ async def _run_reminder_worker() -> None:
                 """,
                 (today, now.strftime("%Y-%m-%dT%H:%M")),
             ).fetchall()
-            due_morning_emails = connection.execute(
-                """
-                SELECT * FROM exams
-                WHERE user_id != ''
-                  AND exam_date = ?
-                  AND morning_email_sent = 0
-                  AND exam_date || 'T' || end_time > ?
-                """,
-                (today, now.strftime("%Y-%m-%dT%H:%M")),
-            ).fetchall() if now.hour >= 5 else []
             due_deletions = connection.execute(
                 """
                 SELECT * FROM exams
@@ -662,24 +648,6 @@ async def _run_reminder_worker() -> None:
                 with _database() as connection:
                     connection.execute(
                         "UPDATE exams SET email_sent = 1 WHERE id = ? AND user_id = ?",
-                        (row["id"], row["user_id"]),
-                    )
-
-        for row in due_morning_emails:
-            exam = _row_to_exam(row)
-            try:
-                credentials = await asyncio.to_thread(
-                    _get_google_credentials, row["user_id"]
-                )
-                await asyncio.to_thread(_send_exam_email, credentials, exam, "5:00 AM")
-            except (HTTPException, GoogleHttpError, OSError, ValueError) as exc:
-                logger.exception(
-                    "Could not send 5 AM exam reminder for exam id %s: %s", row["id"], exc
-                )
-            else:
-                with _database() as connection:
-                    connection.execute(
-                        "UPDATE exams SET morning_email_sent = 1 WHERE id = ? AND user_id = ?",
                         (row["id"], row["user_id"]),
                     )
 
