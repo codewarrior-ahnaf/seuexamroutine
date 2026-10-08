@@ -1,6 +1,6 @@
-# SEU Exam Routin
+# SEU Exam Routine
 
-SEU Exam Routin is an exam-planning app with a Next.js dashboard and FastAPI backend. Students upload a CSV or Excel routine, enter course codes, connect Google Calendar, and create personal exam events with Calendar notifications.
+SEU Exam Routine is an exam-planning app with a Next.js dashboard and FastAPI backend. Students upload a CSV or Excel routine, enter course codes, connect Google Calendar, and create personal exam events with Calendar notifications.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ SEU Exam Routin is an exam-planning app with a Next.js dashboard and FastAPI bac
 3. Create an OAuth client ID with application type **Web application** and add this redirect URI:
    - Local: `http://localhost:3000/api/auth/callback`
    - Hosted: `https://YOUR-FRONTEND-DOMAIN/api/auth/callback`
-4. Set the consent screen app name to **SEU Exam Routin**.
+4. Set the consent screen app name to **SEU Exam Routine**.
 5. For local development, put the downloaded OAuth client JSON in the project root as `gcalendercred.json`. For Railway, store the complete JSON as a private `GOOGLE_CLIENT_CONFIG_JSON` variable. Never commit or expose this secret.
 
 Each student connects their own Google account and grants Calendar and basic account identity access. Google `sub` is used as the stable account identifier. The app stores encrypted credentials and keeps exam records separate by Google account.

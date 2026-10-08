@@ -658,7 +658,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="SEU Exam Routin API", lifespan=lifespan)
+app = FastAPI(title="SEU Exam Routine API", lifespan=lifespan)
 
 
 @app.middleware("http")

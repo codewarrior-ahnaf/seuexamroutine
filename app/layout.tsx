@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SEU Exam Routin | Exam Planner",
-  applicationName: "SEU Exam Routin",
-  description: "Plan your exams and keep your schedule organized with SEU Exam Routin.",
+  title: "SEU Exam Routine | Exam Planner",
+  applicationName: "SEU Exam Routine",
+  description: "Plan your exams and keep your schedule organized with SEU Exam Routine.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
