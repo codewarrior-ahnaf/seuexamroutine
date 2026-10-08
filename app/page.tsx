@@ -104,8 +104,10 @@ export default function Home() {
       setStatus(statusData);
       setExams(examData.exams);
       setError("");
+      return statusData.google_connected;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load dashboard.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -119,8 +121,15 @@ export default function Home() {
     window.addEventListener("hashchange", updateActiveSection);
     const query = new URLSearchParams(window.location.search);
     if (query.get("connected") === "1") {
-      setMessage("Google Calendar and Gmail linked successfully to this account.");
       window.history.replaceState({}, "", window.location.pathname);
+      void loadDashboard().then((isConnected) => {
+        if (isConnected) {
+          setMessage("Google account connected successfully.");
+        } else {
+          setError("Google returned successfully, but this browser is not connected yet. Please try Connect Google again.");
+        }
+      });
+      return () => window.removeEventListener("hashchange", updateActiveSection);
     } else if (query.get("auth_error") === "token_exchange") {
       setError(
         "Google approved sign-in, but the server could not complete it. Check the Google client secret and callback URL in Railway, then try again.",
@@ -307,7 +316,7 @@ export default function Home() {
             </div>
             <div className="stat-card">
               <div className="stat-top"><span>CALENDAR STATUS</span><div className={`stat-icon ${status?.google_connected ? "green" : "red"}`}>{status?.google_connected ? <Check size={17} /> : <X size={17} />}</div></div>
-              <div className="stat-value status-value">{status?.google_connected ? "Linked" : "Not linked"}</div>
+      <div className="stat-value status-value">{status?.google_connected ? "Connected" : "Not connected"}</div>
               <div className="stat-note">{status?.google_connected ? "Events sync to your primary calendar" : "Connect Google to get started"}</div>
             </div>
             <div className="stat-card">
@@ -322,7 +331,7 @@ export default function Home() {
             <div className="connect-copy">
               <strong>
                 {status?.google_connected
-                  ? "Your Google account is linked"
+                  ? "Your Google account is connected"
                   : status?.google_client_configured
                     ? "Connect your Google account"
                     : "Connect Google Calendar"}
@@ -350,7 +359,7 @@ export default function Home() {
                 Connect Google <ArrowUpRight size={16} />
               </a>
             ) : (
-              <span className="connected-label"><Check size={15} /> Linked</span>
+              <span className="connected-label"><Check size={15} /> Connected</span>
             )}
           </section>
 
