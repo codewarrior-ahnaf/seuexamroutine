@@ -13,7 +13,6 @@ import sqlite3
 import time as time_module
 from contextlib import asynccontextmanager, contextmanager
 from datetime import date, datetime, time
-from email.message import EmailMessage
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Generator
@@ -28,6 +27,7 @@ from fastapi.responses import RedirectResponse
 from psycopg.rows import dict_row
 from google.auth.exceptions import GoogleAuthError
 from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2 import id_token as google_id_token
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -68,8 +68,8 @@ IS_SECURE_COOKIE = FRONTEND_ORIGIN.startswith("https://")
 MAX_FILE_BYTES = 10 * 1024 * 1024
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/userinfo.email",
+    "openid",
+    "email",
 ]
 POLL_INTERVAL_SECONDS = 20
 SESSION_IDLE_SECONDS = 10 * 24 * 60 * 60
@@ -249,7 +249,6 @@ def _row_to_exam(row: Any) -> dict[str, Any]:
         "students": row["students"],
         "calendar_added": bool(row["calendar_event_id"]),
         "calendar_deleted": bool(row["calendar_deleted"]),
-        "email_sent": bool(row["email_sent"]),
     }
 
 
@@ -529,24 +528,16 @@ def _calendar_service(credentials: Credentials) -> Any:
     return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
 
-def _gmail_service(credentials: Credentials) -> Any:
-    return build("gmail", "v1", credentials=credentials, cache_discovery=False)
-
-
-def _get_google_email(credentials: Credentials) -> str:
-    profile = build("oauth2", "v2", credentials=credentials, cache_discovery=False)
-    email = profile.userinfo().get().execute().get("email")
-    if not email:
-        raise RuntimeError("Google did not return the linked account email address.")
-    return str(email)
-
-
 def _get_google_profile(credentials: Credentials) -> tuple[str, str]:
-    profile = build("oauth2", "v2", credentials=credentials, cache_discovery=False)
-    data = profile.userinfo().get().execute()
-    user_id = data.get("id")
+    client_id = _load_google_client_config()["web"]["client_id"]
+    if not credentials.id_token:
+        raise RuntimeError("Google did not return an OpenID Connect ID token.")
+    data = google_id_token.verify_oauth2_token(
+        credentials.id_token, GoogleAuthRequest(), client_id
+    )
+    user_id = data.get("sub")
     email = data.get("email")
-    if not user_id or not email:
+    if not user_id or not email or data.get("email_verified") is not True:
         raise RuntimeError("Google did not return the account ID and email address.")
     return str(user_id), str(email)
 
@@ -587,7 +578,6 @@ def build_exam_event_details(exam: dict[str, Any]) -> dict[str, Any]:
                     {"method": "popup", "minutes": minutes}
                     for minutes in popup_minutes
                 ),
-                {"method": "email", "minutes": 2880},
             ],
         },
     }
@@ -601,27 +591,6 @@ def _insert_calendar_event(credentials: Credentials, exam: dict[str, Any]) -> st
     if not event_id:
         raise RuntimeError("Google Calendar did not return an event ID.")
     return event_id
-
-
-def _send_exam_email(
-    credentials: Credentials, exam: dict[str, Any], reminder_time: str = "12:00 AM"
-) -> None:
-    message = EmailMessage()
-    message["To"] = _get_google_email(credentials)
-    message["Subject"] = f"{reminder_time} exam reminder: {exam['course_code']} - {exam['course_title']}"
-    message.set_content(
-        f"This is your {reminder_time} exam reminder for today.\n\n"
-        f"Course: {exam['course_code']} - {exam['course_title']}\n"
-        f"Date: {exam['date']}\n"
-        f"Time: {exam['start_time']} - {exam['end_time']} ({TIMEZONE_NAME})\n"
-        f"Venue: {exam['program']}\n"
-        f"Slot: {exam['slot']}\n\n"
-        "Good luck with your exam!"
-    )
-    encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-    _gmail_service(credentials).users().messages().send(
-        userId="me", body={"raw": encoded_message}
-    ).execute()
 
 
 def _delete_calendar_event(credentials: Credentials, event_id: str) -> None:
@@ -638,18 +607,7 @@ async def _run_reminder_worker() -> None:
     while True:
         try:
             now = datetime.now(EXAM_TIMEZONE)
-            today = now.date().isoformat()
             with _database() as connection:
-                due_midnight_emails = connection.execute(
-                    """
-                    SELECT * FROM exams
-                    WHERE user_id != ''
-                      AND exam_date = ?
-                      AND email_sent = 0
-                      AND exam_date || 'T' || end_time > ?
-                    """,
-                    (today, now.strftime("%Y-%m-%dT%H:%M")),
-                ).fetchall()
                 due_deletions = connection.execute(
                     """
                     SELECT * FROM exams
@@ -664,23 +622,6 @@ async def _run_reminder_worker() -> None:
             logger.exception("Reminder worker could not read due jobs; it will retry.")
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
             continue
-
-        for row in due_midnight_emails:
-            exam = _row_to_exam(row)
-            try:
-                credentials = await asyncio.to_thread(
-                    _get_google_credentials, row["user_id"]
-                )
-                await asyncio.to_thread(_send_exam_email, credentials, exam, "12:00 AM")
-                with _database() as connection:
-                    connection.execute(
-                        "UPDATE exams SET email_sent = 1 WHERE id = ? AND user_id = ?",
-                        (row["id"], row["user_id"]),
-                    )
-            except Exception as exc:
-                logger.exception(
-                    "Could not send exam reminder for exam id %s: %s", row["id"], exc
-                )
 
         for row in due_deletions:
             try:
@@ -717,7 +658,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="ExamMate API", lifespan=lifespan)
+app = FastAPI(title="SEU Exam Mate API", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -831,17 +772,20 @@ def google_auth_callback(
     code: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    if error:
-        response = RedirectResponse(f"{FRONTEND_ORIGIN}/?auth_error=cancelled")
+    def auth_error_response(error_code: str) -> RedirectResponse:
+        response = RedirectResponse(f"{FRONTEND_ORIGIN}/?auth_error={error_code}")
         response.delete_cookie(
             "exam_oauth_browser", path="/", secure=IS_SECURE_COOKIE, samesite="lax"
         )
         return response
+
+    if error:
+        return auth_error_response("cancelled")
     if not code:
-        raise HTTPException(status_code=400, detail="Google authorization did not return a code.")
+        return auth_error_response("missing_code")
     browser_nonce = request.cookies.get("exam_oauth_browser", "")
     if not browser_nonce:
-        raise HTTPException(status_code=400, detail="Invalid or expired Google OAuth state.")
+        return auth_error_response("state")
     with _database() as connection:
         flow_state = connection.execute(
             "SELECT browser_hash, created_at FROM oauth_flows WHERE state = ?",
@@ -854,18 +798,18 @@ def google_auth_callback(
         or time_module.time() - flow_state["created_at"] > 600
         or not hmac.compare_digest(flow_state["browser_hash"], expected_browser_hash)
     ):
-        raise HTTPException(status_code=400, detail="Invalid or expired Google OAuth state.")
+        return auth_error_response("state")
     flow = _get_flow(state)
     try:
         flow.fetch_token(code=code)
     except (GoogleAuthError, OAuth2Error, RequestException) as exc:
         logger.exception("Google OAuth token exchange failed.")
-        response = RedirectResponse(f"{FRONTEND_ORIGIN}/?auth_error=token_exchange")
-        response.delete_cookie(
-            "exam_oauth_browser", path="/", secure=IS_SECURE_COOKIE, samesite="lax"
-        )
-        return response
-    user_id, email = _get_google_profile(flow.credentials)
+        return auth_error_response("token_exchange")
+    try:
+        user_id, email = _get_google_profile(flow.credentials)
+    except (GoogleAuthError, ValueError, RuntimeError) as exc:
+        logger.exception("Could not validate the Google account profile.")
+        return auth_error_response("profile")
     with _database() as connection:
         account_count = connection.execute(
             "SELECT COUNT(*) AS count FROM google_accounts"

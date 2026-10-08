@@ -8,7 +8,6 @@ import {
   Check,
   Clock3,
   LoaderCircle,
-  Mail,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -27,7 +26,6 @@ type Exam = {
   program: string;
   calendar_added: boolean;
   calendar_deleted: boolean;
-  email_sent: boolean;
 };
 
 type DashboardStatus = {
@@ -135,6 +133,12 @@ export default function Home() {
         "Google approved sign-in, but the server could not complete it. Check the Google client secret and callback URL in Railway, then try again.",
       );
       window.history.replaceState({}, "", window.location.pathname);
+    } else if (query.get("auth_error") === "profile") {
+      setError("Google sign-in could not verify your account. Check the OAuth client setup and try again.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (query.get("auth_error") === "state" || query.get("auth_error") === "missing_code") {
+      setError("This Google sign-in link expired or could not be verified. Please connect again.");
+      window.history.replaceState({}, "", window.location.pathname);
     } else if (query.get("auth_error")) {
       setError("Google sign-in was cancelled. Connect your account to schedule reminders.");
       window.history.replaceState({}, "", window.location.pathname);
@@ -227,7 +231,7 @@ export default function Home() {
       <aside className="sidebar">
         <a className="brand" href="#">
           <span className="brand-mark"><CalendarDays size={19} /></span>
-          <span>exam<span className="brand-light">mate</span></span>
+          <span>SEU <span className="brand-light">Exam Mate</span></span>
         </a>
         <div className="side-label">WORKSPACE</div>
         <a className={`nav-item ${activeSection === "overview" ? "active" : ""}`} href="#overview" onClick={() => setActiveSection("overview")}><span className="nav-dot" />Overview</a>
@@ -236,7 +240,7 @@ export default function Home() {
           <div className="help-card">
             <div className="help-icon"><Bell size={17} /></div>
             <strong>Never miss an exam</strong>
-            <p>Calendar alerts and a midnight email keep your day on track.</p>
+            <p>Calendar alerts help keep your exam day on track.</p>
           </div>
         </div>
       </aside>
@@ -305,8 +309,8 @@ export default function Home() {
             <div className="today-chip"><CalendarDays size={16} /> {new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" }).format(new Date())}</div>
           </section>
 
-          {error && <div className="alert error-alert" role="alert"><span>{error}</span><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
-          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><span>{message}</span><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {error && <div className="alert error-alert" role="alert"><strong>SEU Exam Mate</strong><span>{error}</span><button className="toast-close" type="button" onClick={() => setError("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
+          {message && <div className="alert success-alert" role="status" aria-live="polite"><Check size={17} /><strong>SEU Exam Mate</strong><span>{message}</span><button className="toast-close" type="button" onClick={() => setMessage("")} aria-label="Dismiss notification"><X size={16} /></button></div>}
 
           <section className="stats-grid">
             <div className="stat-card">
@@ -320,9 +324,9 @@ export default function Home() {
               <div className="stat-note">{status?.google_connected ? "Events sync to your primary calendar" : "Connect Google to get started"}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-top"><span>EMAIL REMINDERS</span><div className="stat-icon amber"><Mail size={17} /></div></div>
-              <div className="stat-value status-value">12:00 AM</div>
-              <div className="stat-note">Sent on each exam day · {status?.timezone ?? "Asia/Dhaka"}</div>
+              <div className="stat-top"><span>CALENDAR REMINDERS</span><div className="stat-icon amber"><Bell size={17} /></div></div>
+              <div className="stat-value status-value">5:00 AM</div>
+              <div className="stat-note">Exam day · {status?.timezone ?? "Asia/Dhaka"}</div>
             </div>
           </section>
 
@@ -338,9 +342,9 @@ export default function Home() {
               </strong>
               <span>
                 {status?.google_connected
-                  ? `Calendar reminders and email will use ${status.email}.`
+                  ? `Calendar reminders will use ${status.email}.`
                   : status?.google_client_configured
-                    ? "Allow access to create calendar events and send your exam-day email."
+                    ? "Allow access to create exam reminders in your Google Calendar."
                     : "Link your Google account to add exam reminders to your calendar."}
               </span>
             </div>
@@ -403,11 +407,11 @@ export default function Home() {
               <div className="timeline">
                 <div className="timeline-item"><span className="timeline-number">1</span>                <div><strong>Pick your routine</strong><p>Download the routine from your university drive and upload the Excel/CSV file.</p></div></div>
                 <div className="timeline-item"><span className="timeline-number">2</span><div><strong>Add your course codes</strong><p>We’ll match only your exams from the full routine.</p></div></div>
-                <div className="timeline-item"><span className="timeline-number">3</span><div><strong>We’ll take it from here</strong><p>Calendar alerts, a midnight email, and cleanup after each exam.</p></div></div>
+                <div className="timeline-item"><span className="timeline-number">3</span><div><strong>We’ll take it from here</strong><p>Calendar alerts and cleanup after each exam.</p></div></div>
               </div>
               <div className="reminder-info">
                 <div className="reminder-info-icon"><Clock3 size={16} /></div>
-                <div><strong>Built-in reminders</strong><p>Calendar: 1 day, 2 hours &amp; 2 days before<br />Email: 12 AM on exam day</p></div>
+                <div><strong>Built-in Calendar reminders</strong><p>5:00 AM on exam day<br />1 day and 2 hours before</p></div>
               </div>
             </aside>
           </div>
