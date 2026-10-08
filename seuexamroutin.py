@@ -717,7 +717,7 @@ async def lifespan(_: FastAPI):
             pass
 
 
-app = FastAPI(title="Exam Routine Dashboard API", lifespan=lifespan)
+app = FastAPI(title="ExamMate API", lifespan=lifespan)
 
 
 @app.middleware("http")
@@ -860,7 +860,11 @@ def google_auth_callback(
         flow.fetch_token(code=code)
     except (GoogleAuthError, OAuth2Error, RequestException) as exc:
         logger.exception("Google OAuth token exchange failed.")
-        raise HTTPException(status_code=400, detail="Google authorization failed.") from exc
+        response = RedirectResponse(f"{FRONTEND_ORIGIN}/?auth_error=token_exchange")
+        response.delete_cookie(
+            "exam_oauth_browser", path="/", secure=IS_SECURE_COOKIE, samesite="lax"
+        )
+        return response
     user_id, email = _get_google_profile(flow.credentials)
     with _database() as connection:
         account_count = connection.execute(

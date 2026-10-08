@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ExamMate | Exam Planner",
-  description: "Schedule exam reminders in Google Calendar and Gmail.",
+  applicationName: "ExamMate",
+  description: "Plan your exams and keep your schedule organized with ExamMate.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",

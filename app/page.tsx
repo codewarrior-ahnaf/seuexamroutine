@@ -121,6 +121,11 @@ export default function Home() {
     if (query.get("connected") === "1") {
       setMessage("Google Calendar and Gmail linked successfully to this account.");
       window.history.replaceState({}, "", window.location.pathname);
+    } else if (query.get("auth_error") === "token_exchange") {
+      setError(
+        "Google approved sign-in, but the server could not complete it. Check the Google client secret and callback URL in Railway, then try again.",
+      );
+      window.history.replaceState({}, "", window.location.pathname);
     } else if (query.get("auth_error")) {
       setError("Google sign-in was cancelled. Connect your account to schedule reminders.");
       window.history.replaceState({}, "", window.location.pathname);
