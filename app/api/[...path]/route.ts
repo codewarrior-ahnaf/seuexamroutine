@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = (process.env.API_BACKEND_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-const BACKEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:3000";
 const ALLOWED_ROUTES = new Set([
   "api/status",
   "api/exams",
@@ -21,24 +19,56 @@ async function proxyRequest(
   }
 
   const headers = new Headers();
+  const isMutation = request.method === "POST" || request.method === "DELETE";
   const contentType = request.headers.get("content-type");
   const cookie = request.headers.get("cookie");
   const origin = request.headers.get("origin");
-  if (
-    (request.method === "POST" || request.method === "DELETE") &&
-    origin &&
-    origin !== request.nextUrl.origin
-  ) {
+  if (isMutation && (!origin || origin !== request.nextUrl.origin)) {
     return NextResponse.json({ detail: "Request origin is not allowed." }, { status: 403 });
   }
+
+  const configuredBackend = process.env.API_BACKEND_URL?.trim();
+  const backendOrigin = process.env.FRONTEND_ORIGIN?.trim().replace(/\/+$/, "");
+  if (process.env.NODE_ENV === "production" && (!configuredBackend || !backendOrigin)) {
+    console.error("API_BACKEND_URL and FRONTEND_ORIGIN must be set for the production API proxy.");
+    return NextResponse.json(
+      { detail: "The exam service is not configured. Please contact the site administrator." },
+      { status: 503 },
+    );
+  }
+
+  let backendUrl: URL;
+  try {
+    backendUrl = new URL(configuredBackend || "http://127.0.0.1:8000");
+  } catch {
+    return NextResponse.json(
+      { detail: "The exam service is not configured. Please contact the site administrator." },
+      { status: 503 },
+    );
+  }
+  if (
+    backendUrl.username ||
+    backendUrl.password ||
+    backendUrl.search ||
+    backendUrl.hash ||
+    (backendUrl.pathname !== "/" && backendUrl.pathname !== "") ||
+    (process.env.NODE_ENV === "production" && backendUrl.protocol !== "https:")
+  ) {
+    console.error("API_BACKEND_URL must be a public HTTPS origin without credentials, path, query, or fragment.");
+    return NextResponse.json(
+      { detail: "The exam service is not configured. Please contact the site administrator." },
+      { status: 503 },
+    );
+  }
+
   if (contentType) headers.set("content-type", contentType);
   if (cookie) headers.set("cookie", cookie);
-  if (request.method === "POST" || request.method === "DELETE") {
-    headers.set("origin", BACKEND_ORIGIN);
+  if (isMutation) {
+    headers.set("origin", backendOrigin || "http://localhost:3000");
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/${route}${request.nextUrl.search}`, {
+    const response = await fetch(`${backendUrl.origin}/${route}${request.nextUrl.search}`, {
       method: request.method,
       headers,
       body: request.method === "GET" ? undefined : await request.arrayBuffer(),

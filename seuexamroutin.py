@@ -53,6 +53,8 @@ TIMEZONE_NAME = os.getenv("TIMEZONE", "Asia/Dhaka")
 SESSION_SECRET_FILE = BASE_DIR / ".session_secret"
 SESSION_SECRET = os.getenv("SESSION_SECRET_KEY", "")
 IS_PRODUCTION = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("NODE_ENV") == "production")
+if IS_PRODUCTION and not DATABASE_URL:
+    raise RuntimeError("Set DATABASE_URL to the persistent PostgreSQL database in production.")
 if not SESSION_SECRET:
     if IS_PRODUCTION:
         raise RuntimeError("Set SESSION_SECRET_KEY to a private random value in production.")
@@ -429,7 +431,7 @@ def _read_routine(data: bytes, filename: str) -> pd.DataFrame:
     return frame
 
 
-def _get_flow(state: str | None = None) -> Flow:
+def _load_google_client_config() -> dict[str, Any]:
     client_json = os.getenv("GOOGLE_CLIENT_CONFIG_JSON")
     if not client_json and not GOOGLE_CLIENT_FILE.is_file():
         raise HTTPException(
@@ -441,14 +443,39 @@ def _get_flow(state: str | None = None) -> Flow:
         )
     try:
         if client_json:
-            flow = Flow.from_client_config(
-                json.loads(client_json), scopes=SCOPES, state=state
-            )
+            client_config = json.loads(client_json)
         else:
-            flow = Flow.from_client_secrets_file(
-                str(GOOGLE_CLIENT_FILE), scopes=SCOPES, state=state
-            )
-    except (ValueError, OSError) as exc:
+            client_config = json.loads(GOOGLE_CLIENT_FILE.read_text(encoding="utf-8"))
+    except (ValueError, OSError, TypeError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth client configuration is invalid.",
+        ) from exc
+    web_config = client_config.get("web") if isinstance(client_config, dict) else None
+    if not isinstance(web_config, dict) or not all(
+        isinstance(web_config.get(key), str) and web_config[key].strip()
+        for key in ("client_id", "client_secret", "auth_uri", "token_uri")
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth configuration must be the complete Web application JSON.",
+        )
+    return client_config
+
+
+def _google_oauth_configured() -> bool:
+    try:
+        _load_google_client_config()
+    except HTTPException:
+        return False
+    return True
+
+
+def _get_flow(state: str | None = None) -> Flow:
+    client_config = _load_google_client_config()
+    try:
+        flow = Flow.from_client_config(client_config, scopes=SCOPES, state=state)
+    except (ValueError, OSError, TypeError, KeyError) as exc:
         raise HTTPException(
             status_code=503,
             detail="Google OAuth client configuration is invalid.",
@@ -609,29 +636,34 @@ def _delete_calendar_event(credentials: Credentials, event_id: str) -> None:
 
 async def _run_reminder_worker() -> None:
     while True:
-        now = datetime.now(EXAM_TIMEZONE)
-        today = now.date().isoformat()
-        with _database() as connection:
-            due_midnight_emails = connection.execute(
-                """
-                SELECT * FROM exams
-                WHERE user_id != ''
-                  AND exam_date = ?
-                  AND email_sent = 0
-                  AND exam_date || 'T' || end_time > ?
-                """,
-                (today, now.strftime("%Y-%m-%dT%H:%M")),
-            ).fetchall()
-            due_deletions = connection.execute(
-                """
-                SELECT * FROM exams
-                WHERE user_id != ''
-                  AND calendar_event_id IS NOT NULL
-                  AND calendar_deleted = 0
-                  AND exam_date || 'T' || end_time <= ?
-                """,
-                (now.strftime("%Y-%m-%dT%H:%M"),),
-            ).fetchall()
+        try:
+            now = datetime.now(EXAM_TIMEZONE)
+            today = now.date().isoformat()
+            with _database() as connection:
+                due_midnight_emails = connection.execute(
+                    """
+                    SELECT * FROM exams
+                    WHERE user_id != ''
+                      AND exam_date = ?
+                      AND email_sent = 0
+                      AND exam_date || 'T' || end_time > ?
+                    """,
+                    (today, now.strftime("%Y-%m-%dT%H:%M")),
+                ).fetchall()
+                due_deletions = connection.execute(
+                    """
+                    SELECT * FROM exams
+                    WHERE user_id != ''
+                      AND calendar_event_id IS NOT NULL
+                      AND calendar_deleted = 0
+                      AND exam_date || 'T' || end_time <= ?
+                    """,
+                    (now.strftime("%Y-%m-%dT%H:%M"),),
+                ).fetchall()
+        except Exception:
+            logger.exception("Reminder worker could not read due jobs; it will retry.")
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+            continue
 
         for row in due_midnight_emails:
             exam = _row_to_exam(row)
@@ -640,16 +672,15 @@ async def _run_reminder_worker() -> None:
                     _get_google_credentials, row["user_id"]
                 )
                 await asyncio.to_thread(_send_exam_email, credentials, exam, "12:00 AM")
-            except (HTTPException, GoogleHttpError, OSError, ValueError) as exc:
-                logger.exception(
-                    "Could not send exam reminder for exam id %s: %s", row["id"], exc
-                )
-            else:
                 with _database() as connection:
                     connection.execute(
                         "UPDATE exams SET email_sent = 1 WHERE id = ? AND user_id = ?",
                         (row["id"], row["user_id"]),
                     )
+            except Exception as exc:
+                logger.exception(
+                    "Could not send exam reminder for exam id %s: %s", row["id"], exc
+                )
 
         for row in due_deletions:
             try:
@@ -659,16 +690,15 @@ async def _run_reminder_worker() -> None:
                 await asyncio.to_thread(
                     _delete_calendar_event, credentials, row["calendar_event_id"]
                 )
-            except (HTTPException, GoogleHttpError, OSError) as exc:
-                logger.exception(
-                    "Could not remove calendar event for exam id %s: %s", row["id"], exc
-                )
-            else:
                 with _database() as connection:
                     connection.execute(
                         "UPDATE exams SET calendar_deleted = 1 WHERE id = ? AND user_id = ?",
                         (row["id"], row["user_id"]),
                     )
+            except Exception as exc:
+                logger.exception(
+                    "Could not remove calendar event for exam id %s: %s", row["id"], exc
+                )
 
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
@@ -752,9 +782,7 @@ def get_status(request: FastAPIRequest) -> dict[str, Any]:
                 email = ""
             else:
                 connected = True
-    client_configured = bool(
-        os.getenv("GOOGLE_CLIENT_CONFIG_JSON") or GOOGLE_CLIENT_FILE.is_file()
-    )
+    client_configured = _google_oauth_configured()
     return {
         "google_connected": connected,
         "google_client_configured": client_configured,
